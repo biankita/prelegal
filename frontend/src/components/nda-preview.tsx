@@ -14,39 +14,44 @@ export function NdaPreview({ values }: Props) {
     s && s.trim() ? s : fallback;
 
   return (
-    <article className="space-y-3 rounded-md border bg-white p-8 text-sm leading-relaxed text-neutral-900 shadow-sm">
-      <h1 className="!mb-2 text-2xl font-bold">
-        Mutual Non-Disclosure Agreement
-      </h1>
-      <p className="!mt-0 text-xs text-neutral-600">
-        Cover Page + Common Paper Mutual NDA Standard Terms (Version 1.0).
-      </p>
+    <article className="space-y-3 rounded-2xl border border-border/60 bg-white p-8 text-sm leading-relaxed text-neutral-900 shadow-xl shadow-indigo-900/5 ring-1 ring-black/[0.02]">
+      <div className="-mx-8 -mt-8 mb-4 rounded-t-2xl bg-gradient-to-r from-indigo-50 via-violet-50 to-fuchsia-50 px-8 py-6">
+        <span className="inline-flex items-center rounded-full bg-white/80 px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-indigo-700 ring-1 ring-indigo-200">
+          Preview
+        </span>
+        <h1 className="mt-2 text-2xl font-bold tracking-tight text-neutral-900">
+          Mutual Non-Disclosure Agreement
+        </h1>
+        <p className="mt-1 text-xs text-neutral-600">
+          Cover Page + Common Paper Mutual NDA Standard Terms (Version 1.0).
+        </p>
+      </div>
 
-      <h2 className="mt-6 text-base font-semibold">Purpose</h2>
+      <SectionHeading>Purpose</SectionHeading>
       <p>{placeholder(values.purpose, "[Purpose]")}</p>
 
-      <h2 className="text-base font-semibold">Effective date</h2>
+      <SectionHeading>Effective date</SectionHeading>
       <p>
         {values.effectiveDate
           ? formatEffectiveDate(values.effectiveDate)
           : "[Effective date]"}
       </p>
 
-      <h2 className="text-base font-semibold">MNDA term</h2>
+      <SectionHeading>MNDA term</SectionHeading>
       <p>
         {values.mndaTerm.type === "expires"
           ? `Expires ${values.mndaTerm.years ?? "[N]"} year(s) from the effective date.`
           : "Continues until terminated in accordance with the terms of the MNDA."}
       </p>
 
-      <h2 className="text-base font-semibold">Term of confidentiality</h2>
+      <SectionHeading>Term of confidentiality</SectionHeading>
       <p>
         {values.confidentialityTerm.type === "years"
           ? `${values.confidentialityTerm.years ?? "[N]"} year(s) from the effective date, but in the case of trade secrets until the Confidential Information is no longer considered a trade secret under applicable laws.`
           : "In perpetuity."}
       </p>
 
-      <h2 className="text-base font-semibold">Governing law &amp; jurisdiction</h2>
+      <SectionHeading>Governing law &amp; jurisdiction</SectionHeading>
       <p>
         Governing Law: {placeholder(values.governingLaw, "[State]")}
         <br />
@@ -55,18 +60,18 @@ export function NdaPreview({ values }: Props) {
 
       {values.modifications && values.modifications.trim() && (
         <>
-          <h2 className="text-base font-semibold">MNDA modifications</h2>
+          <SectionHeading>MNDA modifications</SectionHeading>
           <p className="whitespace-pre-line">{values.modifications}</p>
         </>
       )}
 
-      <h2 className="text-base font-semibold">Signatures</h2>
+      <SectionHeading>Signatures</SectionHeading>
       <table className="w-full border-collapse text-xs">
         <thead>
-          <tr className="border-b">
-            <th className="py-2 text-left font-medium" />
-            <th className="py-2 text-left font-medium">Party 1</th>
-            <th className="py-2 text-left font-medium">Party 2</th>
+          <tr className="border-b border-indigo-100">
+            <th className="py-2 text-left font-medium text-neutral-600" />
+            <th className="py-2 text-left font-medium text-neutral-700">Party 1</th>
+            <th className="py-2 text-left font-medium text-neutral-700">Party 2</th>
           </tr>
         </thead>
         <tbody>
@@ -83,13 +88,15 @@ export function NdaPreview({ values }: Props) {
         </tbody>
       </table>
 
-      <hr className="my-8" />
+      <div className="my-8 h-px bg-gradient-to-r from-transparent via-indigo-200 to-transparent" />
 
-      <h2 className="text-lg font-semibold">Standard Terms</h2>
+      <h2 className="text-lg font-semibold tracking-tight text-neutral-900">
+        Standard Terms
+      </h2>
       <ol className="space-y-3 pl-5">
         {STANDARD_TERMS.map((c) => (
           <li key={c.number}>
-            <strong>{c.heading}.</strong>{" "}
+            <strong className="text-indigo-900">{c.heading}.</strong>{" "}
             {fillClauseBody(c.body, {
               governingLaw: values.governingLaw,
               jurisdiction: values.jurisdiction,
@@ -99,6 +106,18 @@ export function NdaPreview({ values }: Props) {
       </ol>
       <p className="mt-6 text-xs text-neutral-600">{STANDARD_TERMS_FOOTER}</p>
     </article>
+  );
+}
+
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="mt-6 flex items-center gap-2 text-base font-semibold tracking-tight text-neutral-900">
+      <span
+        aria-hidden
+        className="inline-block h-4 w-1 rounded-full bg-gradient-to-b from-indigo-500 to-violet-600"
+      />
+      {children}
+    </h2>
   );
 }
 
