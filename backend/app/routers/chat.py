@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
+from ..deps import current_user
 from ..documents import DOCUMENTS, MUTUAL_NDA, get_document, is_supported
+from ..models import ChatMessage
 from ..llm import (
     GREETING,
     GenericValues,
@@ -22,12 +24,7 @@ from ..llm import (
 )
 
 
-router = APIRouter()
-
-
-class ChatMessage(BaseModel):
-    role: Literal["user", "assistant"]
-    content: str
+router = APIRouter(dependencies=[Depends(current_user)])
 
 
 class ChatRequest(BaseModel):
