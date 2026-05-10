@@ -1,31 +1,53 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import type { GenericValues } from "@/lib/document-state";
 import type { NdaFormValues } from "@/lib/nda-schema";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
 type Props = {
-  values: NdaFormValues;
-  onChange: (next: NdaFormValues) => void;
+  documentType: string | null;
+  isComplete: boolean;
+  ndaValues: NdaFormValues;
+  genericValues: GenericValues;
+  onState: (next: {
+    documentType: string | null;
+    ndaValues: NdaFormValues;
+    genericValues: GenericValues;
+  }) => void;
 };
 
-export function NdaChat({ values, onChange }: Props) {
+type DocumentResponse = {
+  reply: string;
+  documentType: string | null;
+  suggestedAlternative: string | null;
+  ndaValues: NdaFormValues;
+  genericValues: GenericValues;
+  isComplete: boolean;
+};
+
+export function DocumentChat({
+  documentType,
+  isComplete,
+  ndaValues,
+  genericValues,
+  onState,
+}: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isComplete, setIsComplete] = useState(false);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // Fetch the AI greeting once on mount.
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/chat/greeting")
+    fetch("/api/chat/document-greeting")
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("greeting failed"))))
       .then((body: { reply: string }) => {
         if (!cancelled) setMessages([{ role: "assistant", content: body.reply }]);
@@ -36,7 +58,7 @@ export function NdaChat({ values, onChange }: Props) {
             {
               role: "assistant",
               content:
-                "Hi! Tell me a bit about the agreement and the two parties, and I'll fill in the details for you.",
+                "Hi! Tell me what kind of legal agreement you'd like to draft.",
             },
           ]);
         }
@@ -46,13 +68,12 @@ export function NdaChat({ values, onChange }: Props) {
     };
   }, []);
 
-  // Autoscroll on new messages.
   useEffect(() => {
     const el = scrollerRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, isSending]);
 
-  async function send() {
+  const send = useCallback(async () => {
     const trimmed = input.trim();
     if (!trimmed || isSending) return;
     const next = [...messages, { role: "user" as const, content: trimmed }];
@@ -61,10 +82,15 @@ export function NdaChat({ values, onChange }: Props) {
     setIsSending(true);
     setError(null);
     try {
-      const r = await fetch("/api/chat/message", {
+      const r = await fetch("/api/chat/document-message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next, values }),
+        body: JSON.stringify({
+          messages: next,
+          documentType,
+          ndaValues,
+          genericValues,
+        }),
       });
       if (!r.ok) {
         const detail = await r
@@ -73,20 +99,24 @@ export function NdaChat({ values, onChange }: Props) {
           .catch(() => null);
         throw new Error(detail || `Request failed (${r.status})`);
       }
-      const body: {
-        reply: string;
-        values: NdaFormValues;
-        isComplete: boolean;
-      } = await r.json();
-      onChange(body.values);
-      setIsComplete(body.isComplete);
+      const body: DocumentResponse = await r.json();
+      // "unsupported" is treated as still-undetected so the next user reply
+      // re-runs detection with full conversation history. The suggested
+      // alternative is conveyed in the AI's chat reply text.
+      const dt = body.documentType === "unsupported" ? null : body.documentType;
+      onState({
+        documentType: dt,
+        ndaValues: body.ndaValues,
+        genericValues: body.genericValues,
+      });
       setMessages((prev) => [...prev, { role: "assistant", content: body.reply }]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
       setIsSending(false);
+      requestAnimationFrame(() => inputRef.current?.focus());
     }
-  }
+  }, [input, isSending, messages, documentType, ndaValues, genericValues, onState]);
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -120,6 +150,7 @@ export function NdaChat({ values, onChange }: Props) {
         )}
         <div className="flex items-end gap-2">
           <Textarea
+            ref={inputRef}
             rows={2}
             value={input}
             onChange={(e) => setInput(e.target.value)}
