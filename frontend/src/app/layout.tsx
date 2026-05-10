@@ -13,9 +13,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Mutual NDA creator",
+  title: "Prelegal — AI legal document drafting",
   description:
-    "Generate a Common Paper Mutual NDA from a simple form and download it as a PDF.",
+    "Draft Common Paper legal agreements through an AI chat. Preview live and download as PDF.",
 };
 
 export default function RootLayout({

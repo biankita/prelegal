@@ -106,7 +106,7 @@ export function DocumentHistory({
                   key={d.id}
                   className={
                     "flex items-center gap-3 px-5 py-3 hover:bg-muted/40 " +
-                    (activeDocumentId === d.id ? "bg-indigo-50/60" : "")
+                    (activeDocumentId === d.id ? "bg-[#209dd7]/10" : "")
                   }
                 >
                   <button

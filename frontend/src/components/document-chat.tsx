@@ -193,7 +193,7 @@ function Bubble({
       <div
         className={
           (isUser
-            ? "bg-gradient-to-br from-indigo-500 to-violet-600 text-white"
+            ? "bg-gradient-to-br from-[#209dd7] to-[#753991] text-white"
             : "bg-white text-neutral-900 ring-1 ring-border/60") +
           " max-w-[85%] whitespace-pre-line rounded-2xl px-3 py-2 text-sm shadow-sm" +
           (muted ? " opacity-60" : "")

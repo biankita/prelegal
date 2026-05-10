@@ -234,12 +234,12 @@ export default function Home() {
     <div className="relative min-h-screen bg-background">
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[420px] bg-gradient-to-b from-indigo-100/70 via-violet-50/40 to-transparent"
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[420px] bg-gradient-to-b from-[#209dd7]/15 via-[#753991]/5 to-transparent"
       />
       <header className="border-b border-border/60 bg-white/70 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-md shadow-indigo-500/30">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#209dd7] to-[#753991] text-white shadow-md shadow-[#209dd7]/30">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 24 24"
@@ -256,8 +256,8 @@ export default function Home() {
               </svg>
             </div>
             <div>
-              <h1 className="bg-gradient-to-r from-indigo-700 via-violet-700 to-fuchsia-700 bg-clip-text text-2xl font-semibold tracking-tight text-transparent">
-                Legal document creator
+              <h1 className="text-2xl font-semibold tracking-tight text-[#032147]">
+                Prelegal
               </h1>
               <p className="text-sm text-muted-foreground">
                 {activeSpec
@@ -338,8 +338,8 @@ export default function Home() {
 
 function PreviewPlaceholder() {
   return (
-    <article className="space-y-3 rounded-2xl border border-dashed border-indigo-200 bg-white/50 p-12 text-sm text-neutral-500">
-      <h2 className="text-lg font-medium text-neutral-700">Preview</h2>
+    <article className="space-y-3 rounded-2xl border border-dashed border-[#209dd7]/40 bg-white/50 p-12 text-sm text-muted-foreground">
+      <h2 className="text-lg font-medium text-[#032147]">Preview</h2>
       <p>
         Once you tell the AI what kind of agreement you&apos;d like to draft, the
         document will appear here and update as you answer questions.
