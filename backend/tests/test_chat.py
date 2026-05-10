@@ -151,6 +151,111 @@ def test_message_term_type_switch(client, monkeypatch):
     assert r.json()["values"]["confidentialityTerm"]["type"] == "perpetuity"
 
 
+def test_message_passes_missing_fields_to_llm(client, monkeypatch):
+    """Regression: the LLM must see which required fields are still empty so it
+    keeps asking instead of stopping at "Got it." (bug: incomplete_conversation).
+    """
+    captured: dict = {}
+
+    payload = json.dumps({"reply": "Next question?", "extracted": {}})
+
+    class _Msg:
+        content = payload
+
+    class _Choice:
+        message = _Msg()
+
+    class _Resp:
+        choices = [_Choice()]
+
+    def _capture(**kwargs):
+        captured["messages"] = kwargs["messages"]
+        return _Resp()
+
+    import app.llm as llm_module
+
+    monkeypatch.setattr(llm_module, "completion", _capture)
+
+    partial_values = {
+        "purpose": "evaluating a deal",
+        "effectiveDate": "2026-05-11",
+        "mndaTerm": {"type": "expires", "years": 5},
+        "confidentialityTerm": {"type": "years", "years": 1},
+        "governingLaw": "",
+        "jurisdiction": "",
+        "party1": {"company": "", "signatory": "", "title": "", "noticeAddress": ""},
+        "party2": {"company": "", "signatory": "", "title": "", "noticeAddress": ""},
+        "modifications": "",
+    }
+    r = client.post(
+        "/api/chat/message",
+        json={"messages": [{"role": "user", "content": "In 5 years"}], "values": partial_values},
+    )
+    assert r.status_code == 200, r.text
+
+    system_messages = [m["content"] for m in captured["messages"] if m["role"] == "system"]
+    state_blob = "\n".join(system_messages)
+    assert "Fields still missing" in state_blob
+    assert "governing_law" in state_blob
+    assert "jurisdiction" in state_blob
+    assert "party1_company" in state_blob
+    assert "party2_company" in state_blob
+    # Filled fields must NOT be listed as missing.
+    assert "purpose " not in state_blob.split("Fields still missing:")[1]
+
+
+def test_message_state_prompt_empty_when_complete(client, monkeypatch):
+    captured: dict = {}
+
+    payload = json.dumps({"reply": "All set.", "extracted": {}})
+
+    class _Msg:
+        content = payload
+
+    class _Choice:
+        message = _Msg()
+
+    class _Resp:
+        choices = [_Choice()]
+
+    def _capture(**kwargs):
+        captured["messages"] = kwargs["messages"]
+        return _Resp()
+
+    import app.llm as llm_module
+
+    monkeypatch.setattr(llm_module, "completion", _capture)
+
+    full_values = {
+        "purpose": "x",
+        "effectiveDate": "2026-01-01",
+        "mndaTerm": {"type": "expires", "years": 1},
+        "confidentialityTerm": {"type": "years", "years": 2},
+        "governingLaw": "Delaware",
+        "jurisdiction": "Wilmington, DE",
+        "party1": {
+            "company": "Acme",
+            "signatory": "Alice",
+            "title": "CTO",
+            "noticeAddress": "alice@acme.example",
+        },
+        "party2": {
+            "company": "Beta",
+            "signatory": "Bob",
+            "title": "CEO",
+            "noticeAddress": "bob@beta.example",
+        },
+        "modifications": "",
+    }
+    r = client.post(
+        "/api/chat/message",
+        json={"messages": [{"role": "user", "content": "anything else?"}], "values": full_values},
+    )
+    assert r.status_code == 200, r.text
+    state_blob = "\n".join(m["content"] for m in captured["messages"] if m["role"] == "system")
+    assert "none — all required fields are filled" in state_blob
+
+
 def test_message_rejects_empty_history(client):
     r = client.post("/api/chat/message", json={"messages": [], "values": {}})
     assert r.status_code == 400

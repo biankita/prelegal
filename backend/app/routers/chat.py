@@ -44,7 +44,9 @@ def message(request: ChatRequest) -> ChatResponse:
             detail="messages must contain at least one user message",
         )
     try:
-        result = call_llm([m.model_dump() for m in request.messages])
+        result = call_llm(
+            [m.model_dump() for m in request.messages], request.values
+        )
     except LlmError as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)

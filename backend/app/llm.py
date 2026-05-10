@@ -92,11 +92,16 @@ You must collect these cover-page fields:
 - party2 fields: same four
 - modifications: optional free text; only set if user explicitly asks for changes
 
+Each turn you will receive a "Fields still missing" list showing which required fields have not yet been filled. This list is the source of truth — trust it over your memory of the chat history (the user may also have edited fields directly in a form).
+
 For every turn, return a JSON object with:
 - reply: your next chat message to the user (warm, concise)
 - extracted: any fields you learned this turn. Only include fields the user just told you. Omit fields you didn't learn.
 
-When ALL required fields are collected, your reply should confirm everything is captured and tell them they can review and download the PDF.
+Conversation rules — follow strictly:
+1. If the "Fields still missing" list is non-empty, your reply MUST end by asking the user about one or two of those missing fields. A bare acknowledgement like "Got it." or "Thanks!" with no follow-up question is NOT allowed while fields are missing.
+2. Acknowledge what the user just told you in one short clause, then immediately ask the next question.
+3. Only when "Fields still missing" is empty should your reply confirm everything is captured and tell the user they can review and download the PDF — and in that case, do not ask another question.
 
 Don't invent values. If a field is unclear, ask. If the user gives a partial answer, set what you can and ask for the rest."""
 
@@ -113,11 +118,21 @@ class LlmError(RuntimeError):
     """Raised when the upstream LLM call fails or returns unparseable output."""
 
 
-def call_llm(messages: list[dict[str, str]]) -> LlmReply:
+def call_llm(
+    messages: list[dict[str, str]], values: NdaValues | None = None
+) -> LlmReply:
     """Run the chat completion and return the parsed structured reply."""
     if not os.environ.get("OPENROUTER_API_KEY"):
         raise LlmError("OPENROUTER_API_KEY is not configured on the server")
-    full_messages = [{"role": "system", "content": SYSTEM_PROMPT}, *messages]
+    state_message = {
+        "role": "system",
+        "content": _state_prompt(values if values is not None else NdaValues()),
+    }
+    full_messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        state_message,
+        *messages,
+    ]
     try:
         response = completion(
             model=MODEL,
@@ -187,15 +202,43 @@ def merge_extraction(current: NdaValues, ext: NdaExtraction) -> NdaValues:
     return NdaValues.model_validate(data)
 
 
+def missing_fields(values: NdaValues) -> list[str]:
+    """Human-readable names of required fields not yet filled."""
+    missing: list[str] = []
+    if not values.purpose:
+        missing.append("purpose (how confidential information will be used)")
+    if not values.effectiveDate:
+        missing.append("effective_date (ISO YYYY-MM-DD)")
+    if values.mndaTerm.type == "expires" and not values.mndaTerm.years:
+        missing.append("mnda_term_years (years until the NDA expires)")
+    if values.confidentialityTerm.type == "years" and not values.confidentialityTerm.years:
+        missing.append(
+            "confidentiality_term_years (years confidentiality obligations last)"
+        )
+    if not values.governingLaw:
+        missing.append("governing_law (US state)")
+    if not values.jurisdiction:
+        missing.append("jurisdiction (city/county and state)")
+    for label, party in (("party1", values.party1), ("party2", values.party2)):
+        if not party.company:
+            missing.append(f"{label}_company")
+        if not party.signatory:
+            missing.append(f"{label}_signatory (full name)")
+        if not party.title:
+            missing.append(f"{label}_title")
+        if not party.noticeAddress:
+            missing.append(f"{label}_notice_address (email or postal)")
+    return missing
+
+
 def is_complete(values: NdaValues) -> bool:
     """All required cover-page fields filled (modifications stays optional)."""
-    if not (values.purpose and values.effectiveDate and values.governingLaw and values.jurisdiction):
-        return False
-    for party in (values.party1, values.party2):
-        if not (party.company and party.signatory and party.title and party.noticeAddress):
-            return False
-    if values.mndaTerm.type == "expires" and not values.mndaTerm.years:
-        return False
-    if values.confidentialityTerm.type == "years" and not values.confidentialityTerm.years:
-        return False
-    return True
+    return not missing_fields(values)
+
+
+def _state_prompt(values: NdaValues) -> str:
+    missing = missing_fields(values)
+    if not missing:
+        return "Fields still missing: (none — all required fields are filled)"
+    bullet_list = "\n".join(f"- {f}" for f in missing)
+    return "Fields still missing:\n" + bullet_list

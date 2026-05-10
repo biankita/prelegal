@@ -26,9 +26,14 @@ export function NdaDownloadButton({ values }: Props) {
 
   if (!parsed.success) {
     return (
-      <Button type="button" disabled title="Fill in all required fields">
-        Download PDF
-      </Button>
+      <div className="flex items-center gap-3">
+        <p className="hidden text-xs text-muted-foreground sm:block">
+          Complete the required fields to enable download.
+        </p>
+        <Button type="button" disabled title="Fill in all required fields">
+          Download PDF
+        </Button>
+      </div>
     );
   }
 
