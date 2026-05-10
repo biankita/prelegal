@@ -3,12 +3,13 @@ from __future__ import annotations
 import sqlite3
 from typing import Annotated
 
-from fastapi import APIRouter, Cookie, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, EmailStr, Field
 
 from ..config import settings
 from ..db import connect
-from ..security import decode_token, hash_password, issue_token, verify_password
+from ..deps import CurrentUser, current_user
+from ..security import hash_password, issue_token, verify_password
 
 
 router = APIRouter()
@@ -34,20 +35,6 @@ def _set_auth_cookie(response: Response, token: str) -> None:
         samesite="lax",
         path="/",
     )
-
-
-def _user_from_token(token: str | None) -> UserOut:
-    if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    payload = decode_token(token)
-    if not payload or "sub" not in payload:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    user_id = int(payload["sub"])
-    with connect() as conn:
-        row = conn.execute("SELECT id, email FROM users WHERE id = ?", (user_id,)).fetchone()
-    if row is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unknown user")
-    return UserOut(id=row["id"], email=row["email"])
 
 
 @router.post("/signup", response_model=UserOut, status_code=status.HTTP_201_CREATED)
@@ -92,5 +79,5 @@ def signout(response: Response) -> Response:
 
 
 @router.get("/me", response_model=UserOut)
-def me(auth_token: Annotated[str | None, Cookie()] = None) -> UserOut:
-    return _user_from_token(auth_token)
+def me(user: Annotated[CurrentUser, Depends(current_user)]) -> UserOut:
+    return UserOut(id=user.id, email=user.email)

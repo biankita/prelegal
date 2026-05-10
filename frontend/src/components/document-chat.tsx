@@ -6,15 +6,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import type { GenericValues } from "@/lib/document-state";
+import type { ChatMessage } from "@/lib/documents-api";
 import type { NdaFormValues } from "@/lib/nda-schema";
-
-type ChatMessage = { role: "user" | "assistant"; content: string };
 
 type Props = {
   documentType: string | null;
   isComplete: boolean;
   ndaValues: NdaFormValues;
   genericValues: GenericValues;
+  /** Controlled chat transcript — owned by the parent so it can be saved and
+   * restored from a previously-saved document. */
+  messages: ChatMessage[];
+  onMessagesChange: (next: ChatMessage[]) => void;
   onState: (next: {
     documentType: string | null;
     ndaValues: NdaFormValues;
@@ -36,25 +39,31 @@ export function DocumentChat({
   isComplete,
   ndaValues,
   genericValues,
+  messages,
+  onMessagesChange,
   onState,
 }: Props) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
+  // Greeting only fires for a brand-new conversation. When the parent loads a
+  // saved document it pushes the existing transcript in as `messages`, so we
+  // must not overwrite it with a generic greeting.
+  const messagesEmpty = messages.length === 0;
   useEffect(() => {
+    if (!messagesEmpty) return;
     let cancelled = false;
     fetch("/api/chat/document-greeting")
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("greeting failed"))))
       .then((body: { reply: string }) => {
-        if (!cancelled) setMessages([{ role: "assistant", content: body.reply }]);
+        if (!cancelled) onMessagesChange([{ role: "assistant", content: body.reply }]);
       })
       .catch(() => {
         if (!cancelled) {
-          setMessages([
+          onMessagesChange([
             {
               role: "assistant",
               content:
@@ -66,7 +75,11 @@ export function DocumentChat({
     return () => {
       cancelled = true;
     };
-  }, []);
+    // We deliberately depend on `messagesEmpty` (a derived boolean) and
+    // `onMessagesChange` only — running once when the transcript empties out
+    // (e.g. after the user clicks "Start a new document").
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messagesEmpty]);
 
   useEffect(() => {
     const el = scrollerRef.current;
@@ -76,8 +89,8 @@ export function DocumentChat({
   const send = useCallback(async () => {
     const trimmed = input.trim();
     if (!trimmed || isSending) return;
-    const next = [...messages, { role: "user" as const, content: trimmed }];
-    setMessages(next);
+    const next: ChatMessage[] = [...messages, { role: "user", content: trimmed }];
+    onMessagesChange(next);
     setInput("");
     setIsSending(true);
     setError(null);
@@ -100,23 +113,20 @@ export function DocumentChat({
         throw new Error(detail || `Request failed (${r.status})`);
       }
       const body: DocumentResponse = await r.json();
-      // "unsupported" is treated as still-undetected so the next user reply
-      // re-runs detection with full conversation history. The suggested
-      // alternative is conveyed in the AI's chat reply text.
       const dt = body.documentType === "unsupported" ? null : body.documentType;
       onState({
         documentType: dt,
         ndaValues: body.ndaValues,
         genericValues: body.genericValues,
       });
-      setMessages((prev) => [...prev, { role: "assistant", content: body.reply }]);
+      onMessagesChange([...next, { role: "assistant", content: body.reply }]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
       setIsSending(false);
       requestAnimationFrame(() => inputRef.current?.focus());
     }
-  }, [input, isSending, messages, documentType, ndaValues, genericValues, onState]);
+  }, [input, isSending, messages, onMessagesChange, documentType, ndaValues, genericValues, onState]);
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {

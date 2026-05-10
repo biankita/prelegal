@@ -1,14 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { AuthScreen } from "@/components/auth-screen";
 import { DocumentChat } from "@/components/document-chat";
+import { DocumentHistory } from "@/components/document-history";
 import { GenericDownloadButton } from "@/components/generic-download-button";
 import { GenericPreview } from "@/components/generic-preview";
 import { NdaDownloadButton } from "@/components/nda-download-button";
 import { NdaForm } from "@/components/nda-form";
 import { NdaPreview } from "@/components/nda-preview";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { UserMenu } from "@/components/user-menu";
+import { fetchMe, type AuthUser } from "@/lib/auth";
 import {
   emptyGenericValues,
   isGenericComplete,
@@ -19,17 +24,45 @@ import {
   MUTUAL_NDA_SLUG,
   type DocumentSpec,
 } from "@/lib/documents";
+import {
+  createDocument,
+  getDocument,
+  updateDocument,
+  type ChatMessage,
+} from "@/lib/documents-api";
 import { ndaDefaults, ndaSchema, type NdaFormValues } from "@/lib/nda-schema";
 
 export default function Home() {
+  const [user, setUser] = useState<AuthUser | null | undefined>(undefined);
   const [registry, setRegistry] = useState<DocumentSpec[] | null>(null);
+  const [activeDocumentId, setActiveDocumentId] = useState<number | null>(null);
   const [documentType, setDocumentType] = useState<string | null>(null);
   const [ndaValues, setNdaValues] = useState<NdaFormValues>(ndaDefaults);
   const [genericValues, setGenericValues] = useState<GenericValues>(
     emptyGenericValues,
   );
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyVersion, setHistoryVersion] = useState(0);
 
+  // Resolve session on mount.
   useEffect(() => {
+    let cancelled = false;
+    fetchMe()
+      .then((u) => {
+        if (!cancelled) setUser(u);
+      })
+      .catch(() => {
+        if (!cancelled) setUser(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Load doc registry once we have a session.
+  useEffect(() => {
+    if (!user) return;
     let cancelled = false;
     fetchDocumentRegistry()
       .then((docs) => {
@@ -41,7 +74,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [user]);
 
   const handleNdaChange = useCallback(
     (next: NdaFormValues) => setNdaValues(next),
@@ -72,6 +105,130 @@ export default function Home() {
     if (activeSpec) return isGenericComplete(genericValues, activeSpec);
     return false;
   }, [isNda, ndaValues, activeSpec, genericValues]);
+
+  // Auto-save: persist the current draft after every user-driven change. We
+  // gate on `messages.length > 0` so a fresh visit (just the AI greeting) does
+  // NOT create a row — only conversations with real content. The latest state
+  // is held in a ref so the effect closure doesn't capture stale values.
+  // `savingRef` prevents two concurrent POSTs from racing to create a doc when
+  // `activeDocumentId` is still null. `loadingRef` suppresses one round of
+  // autosave right after a saved doc is restored from the history drawer.
+  const stateRef = useRef({
+    activeDocumentId,
+    documentType,
+    ndaValues,
+    genericValues,
+    messages,
+    isComplete,
+  });
+  stateRef.current = {
+    activeDocumentId,
+    documentType,
+    ndaValues,
+    genericValues,
+    messages,
+    isComplete,
+  };
+  const savingRef = useRef(false);
+  const loadingRef = useRef(false);
+
+  const userPresent = !!user;
+  useEffect(() => {
+    if (!userPresent) return;
+    if (loadingRef.current) {
+      // We just hydrated state from a saved doc. Skip this autosave tick;
+      // the next user-driven change will pick it up.
+      loadingRef.current = false;
+      return;
+    }
+    const userMessageCount = messages.filter((m) => m.role === "user").length;
+    if (userMessageCount === 0) return;
+    // If a create is in flight, skip — when it resolves, `activeDocumentId`
+    // will be set, and a subsequent change will PUT instead of POSTing again.
+    if (savingRef.current && !stateRef.current.activeDocumentId) return;
+
+    let cancelled = false;
+    const snapshot = {
+      documentType: stateRef.current.documentType,
+      ndaValues: stateRef.current.ndaValues,
+      genericValues: stateRef.current.genericValues,
+      messages: stateRef.current.messages,
+      isComplete: stateRef.current.isComplete,
+    };
+
+    savingRef.current = true;
+    const persist = stateRef.current.activeDocumentId
+      ? updateDocument(stateRef.current.activeDocumentId, snapshot)
+      : createDocument(snapshot);
+
+    persist
+      .then((doc) => {
+        if (cancelled) return;
+        if (!stateRef.current.activeDocumentId) {
+          setActiveDocumentId(doc.id);
+        }
+        setHistoryVersion((v) => v + 1);
+      })
+      .catch(() => {
+        // Silent — autosave failures shouldn't block the user. A retry
+        // happens on the next turn anyway.
+      })
+      .finally(() => {
+        savingRef.current = false;
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // Trigger on every change to the conversation or extracted values.
+  }, [messages, documentType, ndaValues, genericValues, isComplete, userPresent]);
+
+  const handleSignedIn = useCallback((u: AuthUser) => {
+    setUser(u);
+  }, []);
+
+  const resetDocument = useCallback(() => {
+    setActiveDocumentId(null);
+    setDocumentType(null);
+    setNdaValues(ndaDefaults);
+    setGenericValues(emptyGenericValues);
+    setMessages([]);
+  }, []);
+
+  const handleSignedOut = useCallback(() => {
+    setUser(null);
+    resetDocument();
+  }, [resetDocument]);
+
+  const handleNewDocument = resetDocument;
+
+  const handleOpenDocument = useCallback(async (id: number) => {
+    try {
+      const doc = await getDocument(id);
+      loadingRef.current = true;
+      setActiveDocumentId(doc.id);
+      setDocumentType(doc.documentType);
+      setNdaValues(doc.ndaValues);
+      setGenericValues(doc.genericValues);
+      setMessages(doc.messages);
+    } catch {
+      // Surface a tiny error if needed; for now just no-op.
+    }
+  }, []);
+
+  if (user === undefined) {
+    return (
+      <div className="min-h-screen bg-background" aria-hidden>
+        <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">
+          Loading…
+        </div>
+      </div>
+    );
+  }
+
+  if (user === null) {
+    return <AuthScreen onSignedIn={handleSignedIn} />;
+  }
 
   return (
     <div className="relative min-h-screen bg-background">
@@ -109,43 +266,52 @@ export default function Home() {
               </p>
             </div>
           </div>
-          {isNda && <NdaDownloadButton values={ndaValues} />}
-          {activeSpec && !isNda && (
-            <GenericDownloadButton spec={activeSpec} values={genericValues} />
-          )}
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setHistoryOpen(true)}
+            >
+              History
+            </Button>
+            {isNda && <NdaDownloadButton values={ndaValues} />}
+            {activeSpec && !isNda && (
+              <GenericDownloadButton spec={activeSpec} values={genericValues} />
+            )}
+            <UserMenu user={user} onSignedOut={handleSignedOut} />
+          </div>
         </div>
       </header>
 
       <main className="mx-auto grid max-w-6xl gap-8 px-6 py-10 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
         <section aria-label="Input" className="lg:sticky lg:top-6 lg:self-start">
-          {isNda ? (
-            <Tabs defaultValue="chat">
-              <TabsList>
-                <TabsTrigger value="chat">Chat</TabsTrigger>
-                <TabsTrigger value="form">Form</TabsTrigger>
-              </TabsList>
-              <TabsContent value="chat">
-                <DocumentChat
-                  documentType={documentType}
-                  isComplete={isComplete}
-                  ndaValues={ndaValues}
-                  genericValues={genericValues}
-                  onState={handleChatState}
-                />
-              </TabsContent>
-              <TabsContent value="form">
-                <NdaForm values={ndaValues} onChange={handleNdaChange} />
-              </TabsContent>
-            </Tabs>
-          ) : (
-            <DocumentChat
-              documentType={documentType}
-              isComplete={isComplete}
-              ndaValues={ndaValues}
-              genericValues={genericValues}
-              onState={handleChatState}
-            />
-          )}
+          {(() => {
+            const chat = (
+              <DocumentChat
+                documentType={documentType}
+                isComplete={isComplete}
+                ndaValues={ndaValues}
+                genericValues={genericValues}
+                messages={messages}
+                onMessagesChange={setMessages}
+                onState={handleChatState}
+              />
+            );
+            if (!isNda) return chat;
+            return (
+              <Tabs defaultValue="chat">
+                <TabsList>
+                  <TabsTrigger value="chat">Chat</TabsTrigger>
+                  <TabsTrigger value="form">Form</TabsTrigger>
+                </TabsList>
+                <TabsContent value="chat">{chat}</TabsContent>
+                <TabsContent value="form">
+                  <NdaForm values={ndaValues} onChange={handleNdaChange} />
+                </TabsContent>
+              </Tabs>
+            );
+          })()}
         </section>
         <section aria-label="Preview">
           {isNda ? (
@@ -157,6 +323,15 @@ export default function Home() {
           )}
         </section>
       </main>
+
+      <DocumentHistory
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        activeDocumentId={activeDocumentId}
+        onOpenDocument={handleOpenDocument}
+        onNewDocument={handleNewDocument}
+        refreshKey={historyVersion}
+      />
     </div>
   );
 }

@@ -10,6 +10,8 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture
 def client(monkeypatch):
+    """Pre-authenticated test client. Chat endpoints require auth, so the
+    fixture signs a default user up before yielding."""
     db_path = os.path.join(tempfile.mkdtemp(), "prelegal-test.db")
     monkeypatch.setenv("PRELEGAL_DB_PATH", db_path)
     monkeypatch.setenv("PRELEGAL_JWT_SECRET", "test-secret-do-not-use-in-prod")
@@ -26,22 +28,39 @@ def client(monkeypatch):
     import app.security as security
 
     importlib.reload(security)
+    import app.deps as deps
+
+    importlib.reload(deps)
     import app.llm as llm
 
     importlib.reload(llm)
     import app.routers.auth as auth_router
     import app.routers.chat as chat_router
+    import app.routers.documents as documents_router
     import app.routers.health as health_router
 
     importlib.reload(auth_router)
     importlib.reload(chat_router)
+    importlib.reload(documents_router)
     importlib.reload(health_router)
     import app.main as main
 
     importlib.reload(main)
 
     with TestClient(main.app) as c:
+        signup = c.post(
+            "/api/auth/signup",
+            json={"email": "tester@example.com", "password": "testpassword123"},
+        )
+        assert signup.status_code == 201, signup.text
         yield c
+
+
+@pytest.fixture
+def unauth_client(client):
+    """Same stack as `client`, but signed out — used to verify auth gating."""
+    client.post("/api/auth/signout")
+    return client
 
 
 def _stub_llm(monkeypatch, *, reply: str, extracted: dict):
@@ -533,6 +552,23 @@ def test_message_surfaces_truncation_error(client, monkeypatch):
     )
     assert r.status_code == 502
     assert "truncated" in r.json()["detail"].lower()
+
+
+def test_chat_endpoints_require_auth(unauth_client):
+    """Every chat endpoint should return 401 without an auth cookie."""
+    assert unauth_client.get("/api/chat/greeting").status_code == 401
+    assert unauth_client.get("/api/chat/document-greeting").status_code == 401
+    assert unauth_client.get("/api/chat/documents").status_code == 401
+    r = unauth_client.post(
+        "/api/chat/message",
+        json={"messages": [{"role": "user", "content": "hi"}], "values": {}},
+    )
+    assert r.status_code == 401
+    r = unauth_client.post(
+        "/api/chat/document-message",
+        json={"messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert r.status_code == 401
 
 
 def test_message_propagates_llm_failure(client, monkeypatch):
