@@ -4,8 +4,9 @@ import dynamic from "next/dynamic";
 import { useMemo } from "react";
 
 import { Button } from "@/components/ui/button";
-import { ndaSchema, type NdaFormValues } from "@/lib/nda-schema";
-import { NdaPdfDocument } from "@/components/nda-pdf";
+import { GenericPdfDocument } from "@/components/generic-pdf";
+import { isGenericComplete, type GenericValues } from "@/lib/document-state";
+import type { DocumentSpec } from "@/lib/documents";
 import { slugifyCompanyName } from "@/lib/utils";
 
 const PDFDownloadLink = dynamic(
@@ -20,12 +21,12 @@ const PDFDownloadLink = dynamic(
   },
 );
 
-type Props = { values: NdaFormValues };
+type Props = { spec: DocumentSpec; values: GenericValues };
 
-export function NdaDownloadButton({ values }: Props) {
-  const parsed = useMemo(() => ndaSchema.safeParse(values), [values]);
+export function GenericDownloadButton({ spec, values }: Props) {
+  const complete = useMemo(() => isGenericComplete(values, spec), [values, spec]);
 
-  if (!parsed.success) {
+  if (!complete) {
     return (
       <div className="flex items-center gap-3">
         <p className="hidden text-xs text-muted-foreground sm:block">
@@ -38,11 +39,15 @@ export function NdaDownloadButton({ values }: Props) {
     );
   }
 
-  const fileName = buildFileName(parsed.data.party1.company, parsed.data.party2.company);
+  const fileName = buildFileName(
+    spec.slug,
+    values.common.party1.company,
+    values.common.party2.company,
+  );
 
   return (
     <PDFDownloadLink
-      document={<NdaPdfDocument data={parsed.data} />}
+      document={<GenericPdfDocument spec={spec} values={values} />}
       fileName={fileName}
     >
       {({ loading }) => (
@@ -54,6 +59,6 @@ export function NdaDownloadButton({ values }: Props) {
   );
 }
 
-function buildFileName(a: string, b: string): string {
-  return `mutual-nda-${slugifyCompanyName(a)}-${slugifyCompanyName(b)}.pdf`;
+function buildFileName(slug: string, a: string, b: string): string {
+  return `${slug.replaceAll("_", "-")}-${slugifyCompanyName(a)}-${slugifyCompanyName(b)}.pdf`;
 }

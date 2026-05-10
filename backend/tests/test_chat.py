@@ -261,6 +261,249 @@ def test_message_rejects_empty_history(client):
     assert r.status_code == 400
 
 
+def _stub_completion(monkeypatch, payload_dict: dict):
+    """Replace litellm.completion with one that returns a fixed JSON payload."""
+    payload = json.dumps(payload_dict)
+
+    class _Msg:
+        content = payload
+
+    class _Choice:
+        message = _Msg()
+
+    class _Resp:
+        choices = [_Choice()]
+
+    captured: dict = {}
+
+    def _capture(**kwargs):
+        captured["messages"] = kwargs["messages"]
+        return _Resp()
+
+    import app.llm as llm_module
+
+    monkeypatch.setattr(llm_module, "completion", _capture)
+    return captured
+
+
+def test_documents_endpoint_lists_all_supported(client):
+    r = client.get("/api/chat/documents")
+    assert r.status_code == 200
+    body = r.json()
+    slugs = [d["slug"] for d in body["documents"]]
+    assert "mutual_nda" in slugs
+    assert "csa" in slugs
+    assert len(slugs) == 11
+
+
+def test_document_message_detects_supported_type(client, monkeypatch):
+    _stub_completion(
+        monkeypatch,
+        {
+            "reply": "Great — for the Mutual NDA, who are the two parties?",
+            "documentType": "mutual_nda",
+            "suggestedAlternative": None,
+        },
+    )
+    r = client.post(
+        "/api/chat/document-message",
+        json={
+            "messages": [{"role": "user", "content": "I need an NDA"}],
+            "documentType": None,
+        },
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["documentType"] == "mutual_nda"
+    assert body["suggestedAlternative"] is None
+    assert body["isComplete"] is False
+
+
+def test_document_message_unsupported_returns_alternative(client, monkeypatch):
+    _stub_completion(
+        monkeypatch,
+        {
+            "reply": "We don't generate employment contracts. The closest we offer is the Professional Services Agreement.",
+            "documentType": "unsupported",
+            "suggestedAlternative": "psa",
+        },
+    )
+    r = client.post(
+        "/api/chat/document-message",
+        json={
+            "messages": [{"role": "user", "content": "I need an employment contract"}],
+            "documentType": None,
+        },
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["documentType"] == "unsupported"
+    assert body["suggestedAlternative"] == "psa"
+
+
+def test_document_message_normalizes_unknown_slug(client, monkeypatch):
+    """Detection LLM hallucinated an invalid slug — backend coerces to null."""
+    _stub_completion(
+        monkeypatch,
+        {
+            "reply": "Sorry, can you clarify what kind of agreement?",
+            "documentType": "made_up_slug",
+            "suggestedAlternative": None,
+        },
+    )
+    r = client.post(
+        "/api/chat/document-message",
+        json={
+            "messages": [{"role": "user", "content": "something legal"}],
+            "documentType": None,
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["documentType"] is None
+
+
+def test_document_message_routes_nda_to_dedicated_path(client, monkeypatch):
+    captured = _stub_completion(
+        monkeypatch,
+        {
+            "reply": "Got it. What's the effective date?",
+            "extracted": {"purpose": "evaluating a deal", "party1_company": "Acme"},
+        },
+    )
+    r = client.post(
+        "/api/chat/document-message",
+        json={
+            "messages": [{"role": "user", "content": "Acme is exploring a deal"}],
+            "documentType": "mutual_nda",
+        },
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["documentType"] == "mutual_nda"
+    assert body["ndaValues"]["purpose"] == "evaluating a deal"
+    assert body["ndaValues"]["party1"]["company"] == "Acme"
+    # NDA system prompt should be in the messages.
+    system_blob = "\n".join(
+        m["content"] for m in captured["messages"] if m["role"] == "system"
+    )
+    assert "Mutual Non-Disclosure Agreement" in system_blob
+
+
+def test_document_message_generic_path_extracts_extras(client, monkeypatch):
+    captured = _stub_completion(
+        monkeypatch,
+        {
+            "reply": "Got it. What's the subscription period?",
+            "extracted": {
+                "purpose": "purchasing the cloud service",
+                "extras": {"fees": "$10,000/year"},
+            },
+        },
+    )
+    r = client.post(
+        "/api/chat/document-message",
+        json={
+            "messages": [{"role": "user", "content": "We're buying ACME's cloud product."}],
+            "documentType": "csa",
+        },
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["documentType"] == "csa"
+    assert body["genericValues"]["common"]["purpose"] == "purchasing the cloud service"
+    assert body["genericValues"]["extras"]["fees"] == "$10,000/year"
+    # Generic system prompt should mention the doc type display name.
+    system_blob = "\n".join(
+        m["content"] for m in captured["messages"] if m["role"] == "system"
+    )
+    assert "Cloud Service Agreement" in system_blob
+    # State prompt must list extras for the registered fields.
+    assert "Fields still missing" in system_blob
+    assert "extras.subscriptionPeriod" in system_blob
+
+
+def test_document_message_drops_unregistered_extras(client, monkeypatch):
+    """LLM returning an extras key not in the registry must be ignored."""
+    _stub_completion(
+        monkeypatch,
+        {
+            "reply": "ok",
+            "extracted": {
+                "extras": {"fees": "$5k", "totallyMadeUpKey": "ignore me"},
+            },
+        },
+    )
+    r = client.post(
+        "/api/chat/document-message",
+        json={
+            "messages": [{"role": "user", "content": "details"}],
+            "documentType": "csa",
+        },
+    )
+    assert r.status_code == 200, r.text
+    extras = r.json()["genericValues"]["extras"]
+    assert extras == {"fees": "$5k"}
+
+
+def test_document_message_generic_complete_when_all_filled(client, monkeypatch):
+    _stub_completion(
+        monkeypatch,
+        {
+            "reply": "All set.",
+            "extracted": {},
+        },
+    )
+    party = {
+        "company": "X",
+        "signatory": "Y",
+        "title": "Z",
+        "noticeAddress": "y@x.example",
+    }
+    full_generic = {
+        "common": {
+            "purpose": "p",
+            "effectiveDate": "2026-01-01",
+            "governingLaw": "Delaware",
+            "jurisdiction": "Wilmington, DE",
+            "party1": party,
+            "party2": party,
+        },
+        "extras": {
+            "pilotPeriod": "60 days",
+            "evaluationPurposes": "assessing fit",
+            "generalCapAmount": "$100k",
+        },
+    }
+    r = client.post(
+        "/api/chat/document-message",
+        json={
+            "messages": [{"role": "user", "content": "anything else?"}],
+            "documentType": "pilot",
+            "genericValues": full_generic,
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["isComplete"] is True
+
+
+def test_document_message_rejects_unknown_doc_type(client):
+    r = client.post(
+        "/api/chat/document-message",
+        json={
+            "messages": [{"role": "user", "content": "hi"}],
+            "documentType": "not_a_real_doc",
+        },
+    )
+    assert r.status_code == 400
+
+
+def test_document_greeting_lists_supported_docs(client):
+    r = client.get("/api/chat/document-greeting")
+    assert r.status_code == 200
+    reply = r.json()["reply"]
+    assert "Mutual NDA" in reply
+
+
 def test_message_propagates_llm_failure(client, monkeypatch):
     import app.llm as llm_module
 
