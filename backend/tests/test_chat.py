@@ -504,6 +504,37 @@ def test_document_greeting_lists_supported_docs(client):
     assert "Mutual NDA" in reply
 
 
+def test_message_surfaces_truncation_error(client, monkeypatch):
+    """When the upstream finishes with reason=length the response was cut off
+    mid-JSON; we should surface a clear error instead of a raw Pydantic
+    parse failure."""
+    truncated = '{"reply":"Got it ...incomplete'
+
+    class _Msg:
+        content = truncated
+
+    class _Choice:
+        message = _Msg()
+        finish_reason = "length"
+
+    class _Resp:
+        choices = [_Choice()]
+
+    import app.llm as llm_module
+
+    monkeypatch.setattr(llm_module, "completion", lambda **_kwargs: _Resp())
+
+    r = client.post(
+        "/api/chat/document-message",
+        json={
+            "messages": [{"role": "user", "content": "details"}],
+            "documentType": "csa",
+        },
+    )
+    assert r.status_code == 502
+    assert "truncated" in r.json()["detail"].lower()
+
+
 def test_message_propagates_llm_failure(client, monkeypatch):
     import app.llm as llm_module
 

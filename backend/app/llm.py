@@ -31,6 +31,10 @@ from .documents import (
 
 MODEL = "openrouter/openai/gpt-oss-120b"
 EXTRA_BODY = {"provider": {"order": ["cerebras"]}}
+# Generous output cap: structured replies with party fields, extras, and a
+# warm reply easily exceed small defaults. 4k leaves headroom for any single
+# turn while still bounding cost.
+MAX_TOKENS = 4096
 
 
 # --- Wire shapes (mirror the frontend Zod schema) ---------------------------
@@ -134,6 +138,23 @@ class LlmError(RuntimeError):
     """Raised when the upstream LLM call fails or returns unparseable output."""
 
 
+def _extract_content(response: Any) -> str:
+    """Pull the message string from a litellm response; raise a clear error
+    if the upstream truncated the output (finish_reason="length") or returned
+    nothing at all."""
+    choice = response.choices[0]
+    finish_reason = getattr(choice, "finish_reason", None)
+    content = choice.message.content
+    if finish_reason == "length":
+        raise LlmError(
+            "LLM response was truncated (hit max_tokens). Please try again — "
+            "if this keeps happening, the output cap may need to be raised."
+        )
+    if not content:
+        raise LlmError("LLM returned an empty response")
+    return content
+
+
 def call_llm(
     messages: list[dict[str, str]], values: NdaValues | None = None
 ) -> LlmReply:
@@ -155,13 +176,12 @@ def call_llm(
             messages=full_messages,
             response_format=LlmReply,
             reasoning_effort="low",
+            max_tokens=MAX_TOKENS,
             extra_body=EXTRA_BODY,
         )
     except Exception as e:  # noqa: BLE001 — surface upstream failures uniformly
         raise LlmError(f"LLM request failed: {e}") from e
-    content = response.choices[0].message.content
-    if not content:
-        raise LlmError("LLM returned an empty response")
+    content = _extract_content(response)
     try:
         return LlmReply.model_validate_json(content)
     except Exception as e:  # noqa: BLE001
@@ -357,13 +377,12 @@ def call_generic_llm(
             messages=full_messages,
             response_format=GenericReply,
             reasoning_effort="low",
+            max_tokens=MAX_TOKENS,
             extra_body=EXTRA_BODY,
         )
     except Exception as e:  # noqa: BLE001
         raise LlmError(f"LLM request failed: {e}") from e
-    content = response.choices[0].message.content
-    if not content:
-        raise LlmError("LLM returned an empty response")
+    content = _extract_content(response)
     try:
         return GenericReply.model_validate_json(content)
     except Exception as e:  # noqa: BLE001
@@ -491,13 +510,12 @@ def detect_document_type(messages: list[dict[str, str]]) -> DetectionReply:
             messages=full_messages,
             response_format=DetectionReply,
             reasoning_effort="low",
+            max_tokens=MAX_TOKENS,
             extra_body=EXTRA_BODY,
         )
     except Exception as e:  # noqa: BLE001
         raise LlmError(f"LLM request failed: {e}") from e
-    content = response.choices[0].message.content
-    if not content:
-        raise LlmError("LLM returned an empty response")
+    content = _extract_content(response)
     try:
         result = DetectionReply.model_validate_json(content)
     except Exception as e:  # noqa: BLE001
