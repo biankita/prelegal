@@ -1,5 +1,6 @@
 "use client";
 
+import { DraftDisclaimer } from "@/components/draft-disclaimer";
 import type { DocumentSpec } from "@/lib/documents";
 import type { GenericValues } from "@/lib/document-state";
 import { formatEffectiveDate } from "@/lib/nda-schema";
@@ -12,19 +13,21 @@ const placeholder = (s: string | undefined, fallback: string) =>
 export function GenericPreview({ spec, values }: Props) {
   const { common, extras } = values;
   return (
-    <article className="space-y-3 rounded-2xl border border-border/60 bg-white p-8 text-sm leading-relaxed text-neutral-900 shadow-xl shadow-indigo-900/5 ring-1 ring-black/[0.02]">
-      <div className="-mx-8 -mt-8 mb-4 rounded-t-2xl bg-gradient-to-r from-indigo-50 via-violet-50 to-fuchsia-50 px-8 py-6">
-        <span className="inline-flex items-center rounded-full bg-white/80 px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-indigo-700 ring-1 ring-indigo-200">
+    <article className="space-y-3 rounded-2xl border border-border/60 bg-white p-8 text-sm leading-relaxed text-neutral-900 shadow-xl shadow-[#032147]/5 ring-1 ring-black/[0.02]">
+      <div className="-mx-8 -mt-8 mb-4 rounded-t-2xl bg-gradient-to-r from-[#209dd7]/10 via-[#753991]/10 to-[#ecad0a]/10 px-8 py-6">
+        <span className="inline-flex items-center rounded-full bg-white/80 px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-[#209dd7] ring-1 ring-[#209dd7]/30">
           Preview
         </span>
-        <h1 className="mt-2 text-2xl font-bold tracking-tight text-neutral-900">
+        <h1 className="mt-2 text-2xl font-bold tracking-tight text-[#032147]">
           {spec.displayName}
         </h1>
-        <p className="mt-1 text-xs text-neutral-600">
+        <p className="mt-1 text-xs text-muted-foreground">
           Cover Page incorporating Common Paper {spec.displayName} Standard Terms
           (Version {spec.termsVersion}).
         </p>
       </div>
+
+      <DraftDisclaimer />
 
       <SectionHeading>Purpose</SectionHeading>
       <p>{placeholder(common.purpose, "[Purpose]")}</p>
@@ -62,7 +65,7 @@ export function GenericPreview({ spec, values }: Props) {
       <SectionHeading>Signatures</SectionHeading>
       <table className="w-full border-collapse text-xs">
         <thead>
-          <tr className="border-b border-indigo-100">
+          <tr className="border-b border-[#209dd7]/20">
             <th className="py-2 text-left font-medium text-neutral-600" />
             <th className="py-2 text-left font-medium text-neutral-700">Party 1</th>
             <th className="py-2 text-left font-medium text-neutral-700">Party 2</th>
@@ -82,16 +85,16 @@ export function GenericPreview({ spec, values }: Props) {
         </tbody>
       </table>
 
-      <div className="my-8 h-px bg-gradient-to-r from-transparent via-indigo-200 to-transparent" />
+      <div className="my-8 h-px bg-gradient-to-r from-transparent via-[#209dd7]/30 to-transparent" />
 
-      <p className="text-xs text-neutral-600">
+      <p className="text-xs text-muted-foreground">
         This Cover Page incorporates by reference the Common Paper {spec.displayName}{" "}
         Standard Terms (Version {spec.termsVersion}), available at{" "}
         <a
           href={spec.termsUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-indigo-700 underline"
+          className="text-[#209dd7] underline"
         >
           {spec.termsUrl}
         </a>
@@ -104,10 +107,10 @@ export function GenericPreview({ spec, values }: Props) {
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="mt-6 flex items-center gap-2 text-base font-semibold tracking-tight text-neutral-900">
+    <h2 className="mt-6 flex items-center gap-2 text-base font-semibold tracking-tight text-[#032147]">
       <span
         aria-hidden
-        className="inline-block h-4 w-1 rounded-full bg-gradient-to-b from-indigo-500 to-violet-600"
+        className="inline-block h-4 w-1 rounded-full bg-gradient-to-b from-[#209dd7] to-[#753991]"
       />
       {children}
     </h2>

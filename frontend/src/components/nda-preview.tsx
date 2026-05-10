@@ -1,5 +1,6 @@
 "use client";
 
+import { DraftDisclaimer } from "@/components/draft-disclaimer";
 import { formatEffectiveDate, type NdaFormValues } from "@/lib/nda-schema";
 import {
   STANDARD_TERMS,
@@ -14,18 +15,20 @@ export function NdaPreview({ values }: Props) {
     s && s.trim() ? s : fallback;
 
   return (
-    <article className="space-y-3 rounded-2xl border border-border/60 bg-white p-8 text-sm leading-relaxed text-neutral-900 shadow-xl shadow-indigo-900/5 ring-1 ring-black/[0.02]">
-      <div className="-mx-8 -mt-8 mb-4 rounded-t-2xl bg-gradient-to-r from-indigo-50 via-violet-50 to-fuchsia-50 px-8 py-6">
-        <span className="inline-flex items-center rounded-full bg-white/80 px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-indigo-700 ring-1 ring-indigo-200">
+    <article className="space-y-3 rounded-2xl border border-border/60 bg-white p-8 text-sm leading-relaxed text-neutral-900 shadow-xl shadow-[#032147]/5 ring-1 ring-black/[0.02]">
+      <div className="-mx-8 -mt-8 mb-4 rounded-t-2xl bg-gradient-to-r from-[#209dd7]/10 via-[#753991]/10 to-[#ecad0a]/10 px-8 py-6">
+        <span className="inline-flex items-center rounded-full bg-white/80 px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-[#209dd7] ring-1 ring-[#209dd7]/30">
           Preview
         </span>
-        <h1 className="mt-2 text-2xl font-bold tracking-tight text-neutral-900">
+        <h1 className="mt-2 text-2xl font-bold tracking-tight text-[#032147]">
           Mutual Non-Disclosure Agreement
         </h1>
-        <p className="mt-1 text-xs text-neutral-600">
+        <p className="mt-1 text-xs text-muted-foreground">
           Cover Page + Common Paper Mutual NDA Standard Terms (Version 1.0).
         </p>
       </div>
+
+      <DraftDisclaimer />
 
       <SectionHeading>Purpose</SectionHeading>
       <p>{placeholder(values.purpose, "[Purpose]")}</p>
@@ -68,7 +71,7 @@ export function NdaPreview({ values }: Props) {
       <SectionHeading>Signatures</SectionHeading>
       <table className="w-full border-collapse text-xs">
         <thead>
-          <tr className="border-b border-indigo-100">
+          <tr className="border-b border-[#209dd7]/20">
             <th className="py-2 text-left font-medium text-neutral-600" />
             <th className="py-2 text-left font-medium text-neutral-700">Party 1</th>
             <th className="py-2 text-left font-medium text-neutral-700">Party 2</th>
@@ -88,15 +91,15 @@ export function NdaPreview({ values }: Props) {
         </tbody>
       </table>
 
-      <div className="my-8 h-px bg-gradient-to-r from-transparent via-indigo-200 to-transparent" />
+      <div className="my-8 h-px bg-gradient-to-r from-transparent via-[#209dd7]/30 to-transparent" />
 
-      <h2 className="text-lg font-semibold tracking-tight text-neutral-900">
+      <h2 className="text-lg font-semibold tracking-tight text-[#032147]">
         Standard Terms
       </h2>
       <ol className="space-y-3 pl-5">
         {STANDARD_TERMS.map((c) => (
           <li key={c.number}>
-            <strong className="text-indigo-900">{c.heading}.</strong>{" "}
+            <strong className="text-[#032147]">{c.heading}.</strong>{" "}
             {fillClauseBody(c.body, {
               governingLaw: values.governingLaw,
               jurisdiction: values.jurisdiction,
@@ -111,15 +114,16 @@ export function NdaPreview({ values }: Props) {
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="mt-6 flex items-center gap-2 text-base font-semibold tracking-tight text-neutral-900">
+    <h2 className="mt-6 flex items-center gap-2 text-base font-semibold tracking-tight text-[#032147]">
       <span
         aria-hidden
-        className="inline-block h-4 w-1 rounded-full bg-gradient-to-b from-indigo-500 to-violet-600"
+        className="inline-block h-4 w-1 rounded-full bg-gradient-to-b from-[#209dd7] to-[#753991]"
       />
       {children}
     </h2>
   );
 }
+
 
 function SignatureRow({
   label,

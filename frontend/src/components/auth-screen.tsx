@@ -16,11 +16,11 @@ export function AuthScreen({ onSignedIn }: Props) {
     <div className="relative min-h-screen bg-background">
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[420px] bg-gradient-to-b from-indigo-100/70 via-violet-50/40 to-transparent"
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[420px] bg-gradient-to-b from-[#209dd7]/15 via-[#753991]/5 to-transparent"
       />
       <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-10">
         <div className="mb-6 flex flex-col items-center gap-2 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-md shadow-indigo-500/30">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#209dd7] to-[#753991] text-white shadow-md shadow-[#209dd7]/30">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 24 24"
@@ -36,8 +36,8 @@ export function AuthScreen({ onSignedIn }: Props) {
               <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" />
             </svg>
           </div>
-          <h1 className="bg-gradient-to-r from-indigo-700 via-violet-700 to-fuchsia-700 bg-clip-text text-2xl font-semibold tracking-tight text-transparent">
-            Legal document creator
+          <h1 className="text-2xl font-semibold tracking-tight text-[#032147]">
+            Prelegal
           </h1>
           <p className="text-sm text-muted-foreground">
             Sign in to draft agreements and access your saved documents.
