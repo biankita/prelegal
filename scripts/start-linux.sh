@@ -15,7 +15,12 @@ if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     docker rm -f "$CONTAINER_NAME" >/dev/null
 fi
 
+ENV_ARGS=()
+if [ -f .env ]; then
+    ENV_ARGS+=(--env-file .env)
+fi
+
 echo "Starting $CONTAINER_NAME on http://localhost:${PORT}..."
-docker run -d --name "$CONTAINER_NAME" -p "${PORT}:8000" "$IMAGE_NAME"
+docker run -d --name "$CONTAINER_NAME" -p "${PORT}:8000" "${ENV_ARGS[@]}" "$IMAGE_NAME"
 
 echo "Done. Tail logs with: docker logs -f $CONTAINER_NAME"

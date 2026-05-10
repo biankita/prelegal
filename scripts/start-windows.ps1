@@ -16,8 +16,13 @@ if ($existing) {
     docker rm -f $ContainerName | Out-Null
 }
 
+$EnvArgs = @()
+if (Test-Path ".env") {
+    $EnvArgs += @("--env-file", ".env")
+}
+
 Write-Host "Starting $ContainerName on http://localhost:$Port..."
-docker run -d --name $ContainerName -p "${Port}:8000" $ImageName
+docker run -d --name $ContainerName -p "${Port}:8000" @EnvArgs $ImageName
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "Done. Tail logs with: docker logs -f $ContainerName"

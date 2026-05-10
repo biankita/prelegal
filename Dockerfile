@@ -34,6 +34,9 @@ COPY backend/app ./app
 # Copy the built static frontend
 COPY --from=frontend-build /frontend/out /app/static
 
+# Pass OPENROUTER_API_KEY at runtime (via `docker run -e` or compose .env);
+# the backend chat router refuses to call the LLM without it.
+
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
