@@ -2,9 +2,11 @@
 
 import { useCallback, useState } from "react";
 
+import { NdaChat } from "@/components/nda-chat";
 import { NdaDownloadButton } from "@/components/nda-download-button";
 import { NdaForm } from "@/components/nda-form";
 import { NdaPreview } from "@/components/nda-preview";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ndaDefaults, type NdaFormValues } from "@/lib/nda-schema";
 
 export default function Home() {
@@ -41,7 +43,7 @@ export default function Home() {
                 Mutual NDA creator
               </h1>
               <p className="text-sm text-muted-foreground">
-                Fill in the details, preview the agreement, then download a PDF.
+                Chat with the AI or fill in the form, then download the PDF.
               </p>
             </div>
           </div>
@@ -50,8 +52,19 @@ export default function Home() {
       </header>
 
       <main className="mx-auto grid max-w-6xl gap-8 px-6 py-10 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-        <section aria-label="Form" className="lg:sticky lg:top-6 lg:self-start">
-          <NdaForm onChange={handleChange} />
+        <section aria-label="Input" className="lg:sticky lg:top-6 lg:self-start">
+          <Tabs defaultValue="chat">
+            <TabsList>
+              <TabsTrigger value="chat">Chat</TabsTrigger>
+              <TabsTrigger value="form">Form</TabsTrigger>
+            </TabsList>
+            <TabsContent value="chat">
+              <NdaChat values={values} onChange={handleChange} />
+            </TabsContent>
+            <TabsContent value="form">
+              <NdaForm values={values} onChange={handleChange} />
+            </TabsContent>
+          </Tabs>
         </section>
         <section aria-label="Preview">
           <NdaPreview values={values} />

@@ -16,23 +16,34 @@ import {
 } from "@/lib/nda-schema";
 
 type Props = {
+  values?: NdaFormValues;
   onChange: (values: NdaFormValues) => void;
 };
 
-export function NdaForm({ onChange }: Props) {
+export function NdaForm({ values, onChange }: Props) {
   const form = useForm<NdaFormValues>({
     resolver: zodResolver(ndaSchema),
-    defaultValues: ndaDefaults,
+    defaultValues: values ?? ndaDefaults,
     mode: "onBlur",
   });
 
   // Push initial defaults and every subsequent change up to the parent.
-  const { watch } = form;
+  const { watch, reset } = form;
   useEffect(() => {
     onChange(form.getValues());
-    const sub = watch((values) => onChange(values as NdaFormValues));
+    const sub = watch((next) => onChange(next as NdaFormValues));
     return () => sub.unsubscribe();
   }, [watch, form, onChange]);
+
+  // Pull external updates (e.g. AI chat extraction) into the form when they
+  // differ from the current state.
+  useEffect(() => {
+    if (!values) return;
+    const current = form.getValues();
+    if (JSON.stringify(current) !== JSON.stringify(values)) {
+      reset(values, { keepDefaultValues: false });
+    }
+  }, [values, form, reset]);
 
   const mndaTermType = form.watch("mndaTerm.type");
   const confType = form.watch("confidentialityTerm.type");
